@@ -194,6 +194,7 @@
                     <i class="fas fa-image"></i> 生成圖片 (Generate)
                 </button>
             </div>
+            <p id="requestStatus" class="text-sm text-red-600 dark:text-red-400" role="status" aria-live="polite"></p>
 
             <!-- Output Section -->
             <section
@@ -245,6 +246,7 @@
         import { CATEGORY_OPTIONS, CATEGORY_OPTION_DEFAULTS, getCategoryInstructions } from "./category-options.mjs";
         import { copyPromptText } from "./clipboard.mjs";
         import { extractGeneratedImage, toImageDataUrl } from "./image-response.mjs";
+        import { createRequestController, getRequestErrorMessage } from "./request-feedback.mjs";
 
         // ==========================================
         // 1. DATA MODELS & CONSTANTS
@@ -297,7 +299,6 @@
         };
 
         const extractText = (response) => {
-            console.log("Extracting text from:", response);
             if (!response) return "";
 
             // 1. Try standard candidates array (Raw JSON or some SDKs)
@@ -347,7 +348,6 @@
             let lastError = null;
             for (const modelId of modelsToTry) {
                 try {
-                    console.log(`Attempting generation with model: ${modelId}`);
                     // Note: GoogleGenAI SDK usage
                     const response = await ai.models.generateContent({
                         model: modelId,
@@ -356,14 +356,9 @@
                     });
 
                     // Check for standard text output in new SDK
-                    console.log("Gemini Response:", response);
                     return extractText(response);
                 } catch (err) {
-                    console.warn(`Model ${modelId} failed:`, err.message);
                     lastError = err;
-                    if (err.message.includes("429") || err.message.includes("quota")) {
-                        continue; // Try next model
-                    }
                     continue; // Try next optional model
                 }
             }
@@ -375,21 +370,15 @@
             // 用 Nano Banana Pro 生成圖片要用 gemini-3-pro-image-preview，目前 AI Studio 申請的 API Key 只能用 gemini-2.5-flash，要綁信用卡才能用 gemini-3-pro-image-preview
             const modelId = "gemini-3-pro-image-preview";
 
-            try {
-                // Update to match @google/genai syntax
-                const response = await ai.models.generateContent({
-                    model: modelId,
-                    contents: { parts: [{ text: "Generate an image: " + prompt }] },
-                    config: {
-                        responseModalities: ['IMAGE'],
-                        imageConfig: { aspectRatio: state.options.aspectRatio }
-                    }
-                });
-                return extractGeneratedImage(response);
-            } catch (e) {
-                console.error(e);
-                throw e;
-            }
+            const response = await ai.models.generateContent({
+                model: modelId,
+                contents: { parts: [{ text: "Generate an image: " + prompt }] },
+                config: {
+                    responseModalities: ['IMAGE'],
+                    imageConfig: { aspectRatio: state.options.aspectRatio }
+                }
+            });
+            return extractGeneratedImage(response);
         };
 
         // ==========================================
@@ -497,6 +486,22 @@
         // ==========================================
 
         // Listeners
+        const requestButtons = [document.getElementById('enhanceBtn'), document.getElementById('generateBtn')];
+        const requestOverlay = document.getElementById('loadingOverlay');
+        const requestStatus = document.getElementById('requestStatus');
+        const requestController = createRequestController((busy, label) => {
+            requestButtons.forEach((button) => {
+                button.disabled = busy;
+                button.classList.toggle('opacity-60', busy);
+                button.classList.toggle('cursor-not-allowed', busy);
+            });
+            requestOverlay.classList.toggle('hidden', !busy);
+            if (busy) {
+                document.getElementById('loadingText').innerText = label;
+                requestStatus.innerText = '';
+            }
+        });
+
         document.getElementById('apiKeyInput').addEventListener('change', (e) => {
             state.apiKey = e.target.value;
             const remembered = document.getElementById('rememberApiKey').checked;
@@ -582,27 +587,21 @@
         });
 
         document.getElementById('enhanceBtn').addEventListener('click', async () => {
-            const overlay = document.getElementById('loadingOverlay');
             const output = document.getElementById('promptOutput');
+            if (!requestController.begin('Enhancing Prompt with AI Agent...')) return;
 
             try {
-                overlay.classList.remove('hidden');
-                document.getElementById('loadingText').innerText = "Enhancing Prompt with AI Agent...";
-
                 const result = await enhancePrompt();
                 output.innerText = result;
-
             } catch (err) {
-                alert("Error: " + err.message);
-                output.innerText = "Error generating prompt.";
+                requestStatus.innerText = getRequestErrorMessage(err, 'prompt');
             } finally {
-                overlay.classList.add('hidden');
+                requestController.finish();
             }
         });
 
         // Generate Image Handler
         document.getElementById('generateBtn').addEventListener('click', async () => {
-            const overlay = document.getElementById('loadingOverlay');
             const previewContainer = document.getElementById('imagePreview');
             const downloadButton = document.getElementById('downloadImageBtn');
             // Prefer the enhanced prompt if available and valid
@@ -612,13 +611,12 @@
             }
 
             if (!prompt) {
-                alert("請先輸入描述或產生提示詞 (Please enter a prompt first)");
+                requestStatus.innerText = '請先輸入描述或產生提示詞。';
                 return;
             }
+            if (!requestController.begin('Generating Image...')) return;
 
             try {
-                overlay.classList.remove('hidden');
-                document.getElementById('loadingText').innerText = "Generating Image...";
                 previewContainer.replaceChildren(Object.assign(document.createElement('span'), {
                     className: 'text-gray-400 text-sm',
                     textContent: 'Generating...'
@@ -647,14 +645,13 @@
                 }
 
             } catch (err) {
-                console.error(err);
-                alert("Error: " + err.message);
+                requestStatus.innerText = getRequestErrorMessage(err, 'image');
                 previewContainer.replaceChildren(Object.assign(document.createElement('span'), {
                     className: 'text-red-500 text-sm',
                     textContent: '圖片生成失敗。'
                 }));
             } finally {
-                overlay.classList.add('hidden');
+                requestController.finish();
             }
         });
 
