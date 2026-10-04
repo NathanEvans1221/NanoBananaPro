@@ -1,14 +1,18 @@
-# 專案分析與復刻提示詞：Nano Banana Pro (HTML/JS 版)
+# 復刻規劃提示詞：Nano Banana Pro (HTML/JS 版)
 
-## 1. 專案概觀 (Project Overview)
-**應用程式名稱**：Nano Banana Pro 提示詞工坊 (Prompt Workshop) v2.6
-**用途**：專為 Gemini 影像模型優化的高階「提示詞工程 (Prompt Engineering)」工具。它協助使用者針對特定藝術風格（如漫畫、廣告、海報等）生成高品質的中英文提示詞。透過後端 AI Agent，將使用者輸入的簡單指令轉化為專業、複雜的提示詞。
-**目前技術堆疊**：React, TypeScript, Tailwind CSS, Google GenAI SDK。
-**目標技術堆疊**：Vanilla HTML5, JavaScript (ES6+), Tailwind CSS (CDN)。
+> **文件狀態：規劃與示例，不是目前程式的功能規格。** 本文描述一份假想的 React/TypeScript 原始專案及其移植方向；`constants.ts`、`types.ts`、`geminiService.ts` 等來源檔並不存在於此 repo。實際功能與執行方式請以 [README.md](README.md)、[index.html](index.html) 及根目錄的 JavaScript 模組為準。本文的步驟和程式片段不是已完成項目或即時 API 驗證證據。
+
+## 1. 復刻規劃背景 (Project Overview)
+**原始設想名稱**：Nano Banana Pro 提示詞工坊 (Prompt Workshop) v2.6；此版本描述不代表目前頁面版本。
+**原始設想用途**：將簡單描述轉成影像生成提示詞，並依藝術類別套用指令。本文提及的「後端 AI Agent」只是原始構想；目前 repo 是瀏覽器端靜態網頁，直接呼叫 Gemini API，沒有後端服務。
+**假設的來源技術堆疊**：React、TypeScript、Tailwind CSS、Google GenAI SDK；這些 React/TypeScript 原始碼不在目前 repo。
+**本文提出的移植方向**：Vanilla HTML5、JavaScript、Tailwind CSS CDN。repo 已採用單頁 HTML 加 JavaScript 模組的做法；目前功能請查 README。
 
 ---
 
-## 2. AI Agent 實作指南 (Implementation Guide for AI Agent)
+## 2. 復刻實作構想 (Implementation Guide for AI Agent)
+
+以下段落是供重新實作時參考的規劃，並非目前程式的檔案清單或待辦狀態。
 
 ### 2.1. 檔案結構 (File Structure)
 建議採用簡單結構或單一檔案解決方案以利攜帶。
