@@ -96,6 +96,14 @@
                     <input type="password" id="apiKeyInput" placeholder="Enter Gemini API Key"
                         class="px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64">
                 </div>
+                <div class="flex flex-wrap items-center justify-end gap-3 text-xs text-gray-500 dark:text-slate-400">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="rememberApiKey" class="accent-indigo-600">
+                        在此瀏覽器保存金鑰
+                    </label>
+                    <button type="button" id="clearApiKeyBtn" class="text-indigo-600 hover:underline dark:text-indigo-400">清除金鑰</button>
+                </div>
+                <p id="apiKeyStatus" class="text-xs text-gray-500 dark:text-slate-400" aria-live="polite"></p>
             </div>
         </header>
 
@@ -228,6 +236,7 @@
     <!-- MAIN SCRIPT -->
     <script type="module">
         import { GoogleGenAI } from "@google/genai";
+        import { clearStoredApiKey, loadStoredApiKey, persistApiKey } from "./api-key-storage.mjs";
         import { extractGeneratedImage, toImageDataUrl } from "./image-response.mjs";
 
         // ==========================================
@@ -340,11 +349,13 @@
                 copywritingTone: 'PROFESSIONAL',
                 aspectRatio: '1:1'
             },
-            apiKey: localStorage.getItem('GEMINI_API_KEY') || ''
+            apiKey: loadStoredApiKey()
         };
 
         if (state.apiKey) {
             document.getElementById('apiKeyInput').value = state.apiKey;
+            document.getElementById('rememberApiKey').checked = true;
+            document.getElementById('apiKeyStatus').innerText = '正在使用此瀏覽器已保存的金鑰。';
         }
 
         // ==========================================
@@ -639,7 +650,28 @@
         // Listeners
         document.getElementById('apiKeyInput').addEventListener('change', (e) => {
             state.apiKey = e.target.value;
-            localStorage.setItem('GEMINI_API_KEY', state.apiKey);
+            const remembered = document.getElementById('rememberApiKey').checked;
+            const saved = persistApiKey(state.apiKey, remembered);
+            document.getElementById('apiKeyStatus').innerText = saved
+                ? (remembered && state.apiKey ? '金鑰已保存於此瀏覽器。' : '金鑰只保留在目前頁面。')
+                : '瀏覽器不允許保存金鑰；目前仍可在此頁面使用。';
+        });
+
+        document.getElementById('rememberApiKey').addEventListener('change', (e) => {
+            const saved = persistApiKey(state.apiKey, e.target.checked);
+            document.getElementById('apiKeyStatus').innerText = saved
+                ? (e.target.checked ? '已保存目前金鑰於此瀏覽器。' : '已移除保存的金鑰；目前頁面仍可使用。')
+                : '無法更新瀏覽器中的金鑰保存狀態。';
+        });
+
+        document.getElementById('clearApiKeyBtn').addEventListener('click', () => {
+            const cleared = clearStoredApiKey();
+            state.apiKey = '';
+            document.getElementById('apiKeyInput').value = '';
+            document.getElementById('rememberApiKey').checked = false;
+            document.getElementById('apiKeyStatus').innerText = cleared
+                ? '已清除目前輸入及瀏覽器保存的金鑰。'
+                : '目前輸入已清除，但瀏覽器無法確認保存金鑰已移除。';
         });
 
         document.getElementById('userInput').addEventListener('input', (e) => {
