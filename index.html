@@ -216,6 +216,9 @@
                         class="rounded-xl overflow-hidden bg-black/5 min-h-[200px] flex items-center justify-center border border-gray-200 dark:border-slate-700 dark:bg-black/20">
                         <span class="text-gray-400 text-sm">Image Preview</span>
                     </div>
+                    <a id="downloadImageBtn" class="hidden mt-3 inline-flex items-center gap-2 text-sm text-indigo-600 hover:underline dark:text-indigo-400" download>
+                        <i class="fas fa-download"></i> 下載圖片
+                    </a>
                 </div>
             </section>
 
@@ -225,6 +228,7 @@
     <!-- MAIN SCRIPT -->
     <script type="module">
         import { GoogleGenAI } from "@google/genai";
+        import { extractGeneratedImage, toImageDataUrl } from "./image-response.mjs";
 
         // ==========================================
         // 1. DATA MODELS & CONSTANTS
@@ -467,11 +471,13 @@
                 // Update to match @google/genai syntax
                 const response = await ai.models.generateContent({
                     model: modelId,
-                    contents: { parts: [{ text: "Generate an image: " + prompt }] }
+                    contents: { parts: [{ text: "Generate an image: " + prompt }] },
+                    config: {
+                        responseModalities: ['IMAGE'],
+                        imageConfig: { aspectRatio: state.options.aspectRatio }
+                    }
                 });
-                // Attempt to extract text or handle image if SDK returns differently
-                console.log("Image Gen Response:", response);
-                return extractText(response);
+                return extractGeneratedImage(response);
             } catch (e) {
                 console.error(e);
                 throw e;
@@ -711,6 +717,7 @@
         document.getElementById('generateBtn').addEventListener('click', async () => {
             const overlay = document.getElementById('loadingOverlay');
             const previewContainer = document.getElementById('imagePreview');
+            const downloadButton = document.getElementById('downloadImageBtn');
             // Prefer the enhanced prompt if available and valid
             let prompt = document.getElementById('promptOutput').innerText;
             if (!prompt || prompt.includes("Error") || prompt.length < 5) {
@@ -725,29 +732,40 @@
             try {
                 overlay.classList.remove('hidden');
                 document.getElementById('loadingText').innerText = "Generating Image...";
-                previewContainer.innerHTML = '<span class="text-gray-400 text-sm">Generating...</span>';
+                previewContainer.replaceChildren(Object.assign(document.createElement('span'), {
+                    className: 'text-gray-400 text-sm',
+                    textContent: 'Generating...'
+                }));
+                downloadButton.classList.add('hidden');
 
-                const result = await generateImage(prompt);
+                const image = await generateImage(prompt);
 
-                // Minimal handling for image display (assuming result is URL or base64 text for now, 
-                // or regular text if the model is chat-based). 
-                // Detailed image handling depends on the specific model response schema.
-                if (result) {
-                    // Check if result is a URL or Base64 (rough check)
-                    if (result.startsWith('http') || result.startsWith('data:image')) {
-                        previewContainer.innerHTML = `<img src="${result}" class="w-full h-full object-cover" alt="Generated Image">`;
-                    } else {
-                        // Likely text description or error
-                        previewContainer.innerHTML = `<div class="p-4 text-xs overflow-auto h-full w-full">${result}</div>`;
-                    }
+                if (image) {
+                    const imageUrl = toImageDataUrl(image);
+                    const preview = document.createElement('img');
+                    preview.src = imageUrl;
+                    preview.className = 'w-full h-full object-contain';
+                    preview.alt = 'Generated image';
+                    previewContainer.replaceChildren(preview);
+
+                    const extension = image.mimeType === 'image/jpeg' ? 'jpg' : image.mimeType.split('/')[1];
+                    downloadButton.href = imageUrl;
+                    downloadButton.download = `nano-banana-${Date.now()}.${extension}`;
+                    downloadButton.classList.remove('hidden');
                 } else {
-                    previewContainer.innerHTML = '<span class="text-red-500 text-sm">No result returned.</span>';
+                    previewContainer.replaceChildren(Object.assign(document.createElement('span'), {
+                        className: 'text-red-500 text-sm',
+                        textContent: '模型沒有回傳可顯示的圖片。'
+                    }));
                 }
 
             } catch (err) {
                 console.error(err);
                 alert("Error: " + err.message);
-                previewContainer.innerHTML = '<span class="text-red-500 text-sm">Generation Failed</span>';
+                previewContainer.replaceChildren(Object.assign(document.createElement('span'), {
+                    className: 'text-red-500 text-sm',
+                    textContent: '圖片生成失敗。'
+                }));
             } finally {
                 overlay.classList.add('hidden');
             }
