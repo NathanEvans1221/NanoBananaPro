@@ -8,5 +8,5 @@
 - [x] [#4 實作提示詞複製按鈕](https://github.com/chiisen/NanoBananaPro/issues/4) — 複製輸出提示詞並回報操作結果。
 - [x] [#5 同步類別選項、狀態與提示詞映射](https://github.com/chiisen/NanoBananaPro/issues/5) — 讓畫面控制、狀態、提示詞及文件描述保持一致。
 - [x] [#6 改善 API 錯誤提示與請求載入狀態](https://github.com/chiisen/NanoBananaPro/issues/6) — 在頁面呈現可行動的錯誤訊息，避免重複送出。
-- [ ] [#7 安全呈現上傳檔名](https://github.com/chiisen/NanoBananaPro/issues/7) — 以純文字安全呈現檔名及其他使用者提供的動態內容。
+- [x] [#7 安全呈現上傳檔名](https://github.com/chiisen/NanoBananaPro/issues/7) — 以純文字安全呈現檔名及其他使用者提供的動態內容。
 - [ ] [#8 更新 README 與提示詞規劃文件以符合現況](https://github.com/chiisen/NanoBananaPro/issues/8) — 清楚區分已實作功能、限制、設定與規劃內容。

@@ -242,6 +242,7 @@
     <script type="module">
         import { GoogleGenAI } from "@google/genai";
         import { buildAttachmentParts, processAttachments, validateAttachmentFiles } from "./attachments.mjs";
+        import { renderAttachmentList } from "./attachment-list.mjs";
         import { clearStoredApiKey, loadStoredApiKey, persistApiKey } from "./api-key-storage.mjs";
         import { CATEGORY_OPTIONS, CATEGORY_OPTION_DEFAULTS, getCategoryInstructions } from "./category-options.mjs";
         import { copyPromptText } from "./clipboard.mjs";
@@ -543,13 +544,7 @@
 
         const renderFileList = () => {
             const fileListEl = document.getElementById('fileList');
-            fileListEl.innerHTML = state.inputs.files.map((file, index) => `
-                <div class="flex items-center gap-2 mb-2 p-3 rounded-xl bg-white dark:bg-slate-700/50 border border-gray-200 dark:border-slate-600">
-                    <span class="text-indigo-500">📎</span>
-                    <span class="truncate flex-1">${file.name} (${(file.size / 1024).toFixed(1)} KB)</span>
-                    <button type="button" data-remove-file="${index}" class="text-indigo-600 hover:underline dark:text-indigo-400">移除</button>
-                </div>
-            `).join('');
+            renderAttachmentList(document, fileListEl, state.inputs.files);
         };
 
         document.getElementById('fileList').addEventListener('click', (e) => {
