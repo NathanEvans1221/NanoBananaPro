@@ -174,12 +174,13 @@
                 <!-- File Upload Mockup -->
                 <div class="mt-4 p-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 dark:border-slate-700 dark:bg-slate-800/30 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition"
                     onclick="document.getElementById('fileInput').click()">
-                    <input type="file" id="fileInput" class="hidden" multiple accept="image/*, .txt, .pdf">
+                    <input type="file" id="fileInput" class="hidden" multiple accept="image/png,image/jpeg,image/webp,application/pdf,text/plain,.txt">
                     <span class="text-sm text-gray-500 dark:text-slate-400 flex items-center gap-2">
-                        <i class="fas fa-cloud-upload-alt"></i> 上傳參考檔案 / 圖片 (Mockup)
+                        <i class="fas fa-cloud-upload-alt"></i> 上傳參考檔案 / 圖片
                     </span>
                 </div>
                 <div id="fileList" class="mt-2 text-xs text-gray-500"></div>
+                <p id="fileStatus" class="mt-2 text-xs text-gray-500 dark:text-slate-400" aria-live="polite">支援 PNG、JPG、WebP、PDF、TXT；最多 5 個，單檔 10 MB，總計 12 MB。</p>
             </section>
 
             <!-- Actions -->
@@ -236,6 +237,7 @@
     <!-- MAIN SCRIPT -->
     <script type="module">
         import { GoogleGenAI } from "@google/genai";
+        import { buildAttachmentParts, processAttachments, validateAttachmentFiles } from "./attachments.mjs";
         import { clearStoredApiKey, loadStoredApiKey, persistApiKey } from "./api-key-storage.mjs";
         import { extractGeneratedImage, toImageDataUrl } from "./image-response.mjs";
 
@@ -437,14 +439,7 @@
 
             // Content Parts
             const parts = [{ text: state.inputs.userText || "主體不明，請自由發揮" }];
-            // Add images if any
-            if (state.inputs.files && state.inputs.files.length > 0) {
-                state.inputs.files.forEach(f => {
-                    // GenAI SDK expects inlineData
-                    parts.push({ inlineData: { mimeType: f.mimeType, data: f.data } });
-                });
-                parts.push({ text: "\n[System: Please analyze the attached images/files as reference context]" });
-            }
+            parts.push(...buildAttachmentParts(state.inputs.files));
 
             // Try Models Loop
             let lastError = null;
@@ -679,50 +674,48 @@
             document.getElementById('charCount').innerText = `${e.target.value.length} chars`;
         });
 
-        // File Upload Handler
+        const renderFileList = () => {
+            const fileListEl = document.getElementById('fileList');
+            fileListEl.innerHTML = state.inputs.files.map((file, index) => `
+                <div class="flex items-center gap-2 mb-2 p-3 rounded-xl bg-white dark:bg-slate-700/50 border border-gray-200 dark:border-slate-600">
+                    <span class="text-indigo-500">📎</span>
+                    <span class="truncate flex-1">${file.name} (${(file.size / 1024).toFixed(1)} KB)</span>
+                    <button type="button" data-remove-file="${index}" class="text-indigo-600 hover:underline dark:text-indigo-400">移除</button>
+                </div>
+            `).join('');
+        };
+
+        document.getElementById('fileList').addEventListener('click', (e) => {
+            const removeButton = e.target.closest('[data-remove-file]');
+            if (!removeButton) return;
+            state.inputs.files.splice(Number(removeButton.dataset.removeFile), 1);
+            renderFileList();
+            document.getElementById('fileStatus').innerText = '已移除附件。';
+        });
+
         document.getElementById('fileInput').addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
-            state.inputs.files = []; // Reset current files for simplicity, or append if desired
-
-            const fileListEl = document.getElementById('fileList');
-            fileListEl.innerHTML = '';
-
+            e.target.value = '';
             if (files.length === 0) return;
 
-            // Process each file
-            for (const file of files) {
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    const base64Data = evt.target.result.split(',')[1]; // Get base64 content
+            const validation = validateAttachmentFiles(files, state.inputs.files);
+            const status = document.getElementById('fileStatus');
+            if (!validation.valid) {
+                status.innerText = validation.error;
+                return;
+            }
 
-                    // Store in state
-                    state.inputs.files.push({
-                        mimeType: file.type || 'application/octet-stream',
-                        data: base64Data
-                    });
-
-                    // Update UI
-                    const item = document.createElement('div');
-                    item.className = 'flex flex-col gap-2 mb-2 p-3 rounded-xl bg-white dark:bg-slate-700/50 border border-gray-200 dark:border-slate-600';
-
-                    let previewHtml = '';
-                    if (file.type.startsWith('image/')) {
-                        previewHtml = `<img src="${evt.target.result}" class="max-w-full h-auto max-h-48 object-contain rounded-lg border border-gray-200 dark:border-slate-600 mb-2 mx-auto" alt="Preview">`;
-                    }
-
-                    item.innerHTML = `
-                         ${previewHtml}
-                        <div class="flex items-center gap-2">
-                             <span class="text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 p-1.5 rounded-lg text-xs">📎</span>
-                             <div class="flex flex-col min-w-0 flex-1">
-                                <span class="truncate text-xs font-semibold text-gray-700 dark:text-gray-300">${file.name}</span>
-                                <span class="text-[10px] text-gray-400">(${(file.size / 1024).toFixed(1)} KB)</span>
-                             </div>
-                        </div>
-                    `;
-                    fileListEl.appendChild(item);
-                };
-                reader.readAsDataURL(file);
+            try {
+                e.target.disabled = true;
+                status.innerText = '正在讀取附件…';
+                const processed = await processAttachments(files);
+                state.inputs.files.push(...processed);
+                renderFileList();
+                status.innerText = `已加入 ${files.length} 個附件。`;
+            } catch (err) {
+                status.innerText = `讀取附件失敗：${err.message}`;
+            } finally {
+                e.target.disabled = false;
             }
         });
 
