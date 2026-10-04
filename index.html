@@ -242,28 +242,13 @@
         import { GoogleGenAI } from "@google/genai";
         import { buildAttachmentParts, processAttachments, validateAttachmentFiles } from "./attachments.mjs";
         import { clearStoredApiKey, loadStoredApiKey, persistApiKey } from "./api-key-storage.mjs";
+        import { CATEGORY_OPTIONS, CATEGORY_OPTION_DEFAULTS, getCategoryInstructions } from "./category-options.mjs";
         import { copyPromptText } from "./clipboard.mjs";
         import { extractGeneratedImage, toImageDataUrl } from "./image-response.mjs";
 
         // ==========================================
         // 1. DATA MODELS & CONSTANTS
         // ==========================================
-        const StyleCategory = {
-            MANGA: 'MANGA',
-            LINE_STICKER: 'LINE_STICKER',
-            INSTRUCTION_MANUAL: 'INSTRUCTION_MANUAL',
-            ADVERTISEMENT: 'ADVERTISEMENT',
-            COPYWRITING: 'COPYWRITING',
-            POSTER: 'POSTER',
-            BUSINESS_CARD: 'BUSINESS_CARD',
-            ID_PHOTO: 'ID_PHOTO',
-            PHOTOREALISTIC: 'PHOTOREALISTIC',
-            CINEMATIC_3D: 'CINEMATIC_3D',
-            DIGITAL_ART: 'DIGITAL_ART',
-            LOGO_DESIGN: 'LOGO_DESIGN',
-            PIXEL_ART: 'PIXEL_ART'
-        };
-
         const CATEGORIES = [
             { id: 'MANGA', label: '日系漫畫', icon: '✒️', desc: '分鏡、線條張力', baseSystemPrompt: `You are an expert prompt engineer for Nano Banana Pro... specializing in Manga/Anime styles. Convert user input into highly technical prompt in Traditional Chinese.` },
             { id: 'LINE_STICKER', label: 'LINE 貼圖', icon: '😊', desc: '表情包、無白邊', baseSystemPrompt: `You are an expert prompt engineer for Nano Banana Pro... specializing in LINE Sticker creation. CRITICAL RULES: NO WHITE BORDERS...` },
@@ -282,50 +267,6 @@
         ];
 
         // ==========================================
-        // 1.1 PROMPT MAPPINGS (Centralized Logic)
-        // ==========================================
-        const PROMPT_MAPPINGS = {
-            MANGA: {
-                mangaLayout: {
-                    'SINGLE': '特殊指令: 單幅精緻插畫...',
-                    'FOUR_PANEL': '特殊指令: 用戶需要四格漫畫 (Yon-koma)...',
-                    'SIX_PANEL': '特殊指令: 用戶需要六格漫畫 (Six-panel)...',
-                    'COVER': '特殊指令: 用戶需要漫畫單行本封面...'
-                },
-                mangaStyle: {
-                    'JAPANESE': '「日系漫畫風格 (Japanese Manga)」、「網點 (Screentones)」',
-                    'AMERICAN': '「美式漫畫風格 (American Comic)」、「粗獷輪廓」',
-                    'KOREAN': '「韓漫風格 (Korean Webtoon)」、「全彩現代」',
-                    'PIXEL': '「像素漫畫 (Pixel Art Manga)」'
-                }
-            },
-            CINEMATIC_3D: {
-                cinematicStyle: {
-                    'HYPER_REALISTIC': '極致寫實 (Hyper-realistic), 8k textures...',
-                    'DISNEY': '迪士尼風格 (Disney Animation), soft lighting...',
-                    'PIXAR': '皮克斯風格 (Pixar Style), stylized realism...',
-                    'CYBERPUNK': '賽博龐克 (Cyberpunk), neon lights...',
-                }
-            },
-            LINE_STICKER: {
-                stickerLayout: {
-                    'SINGLE': '佈局: 1張貼圖排列',
-                    'SET': '佈局: 8張貼圖排列'
-                },
-                style: {
-                    'DEFAULT': '風格: LINE 貼圖風格，每張必須包含隨機繁體中文說明。NO WHITE BORDER (無白邊)。'
-                }
-            },
-            ADVERTISEMENT: {
-                adMode: {
-                    'PODIUM': '拍攝模式: 展示台 (Podium/Platform)...',
-                    'HAND_MODEL': '拍攝模式: 手部特寫 (Hand Model), 高質感膚質...',
-                    'FULL_MODEL': '拍攝模式: 模特兒情境 (Full Body Model)...'
-                }
-            }
-        };
-
-        // ==========================================
         // 2. STATE MANAGEMENT
         // ==========================================
         const state = {
@@ -335,24 +276,7 @@
                 files: []
             },
             options: {
-                mangaLayout: 'SINGLE',
-                mangaStyle: 'JAPANESE',
-                mangaColor: 'BW',
-                stickerLayout: 'SINGLE',
-                manualStyle: 'CARTOON',
-                adMode: 'PODIUM',
-                adHandType: 'FEMALE_HAND',
-                adModelType: 'FEMALE',
-                adRegion: 'ASIAN',
-                adPodiumType: 'WHITE_PLATFORM',
-                posterType: 'MOVIE',
-                cardType: 'MINIMALIST',
-                logoStyle: 'LINE_ART',
-                idPhotoLayout: 'SINGLE',
-                idPhotoSize: '2_INCH',
-                cinematicStyle: 'HYPER_REALISTIC',
-                copywritingMode: 'SOCIAL_MEDIA',
-                copywritingTone: 'PROFESSIONAL',
+                ...CATEGORY_OPTION_DEFAULTS,
                 aspectRatio: '1:1'
             },
             apiKey: loadStoredApiKey()
@@ -405,38 +329,12 @@
 
             const cat = CATEGORIES.find(c => c.id === state.selectedCategoryId);
 
-            let layoutInstruction = "";
-            let styleVariationInstruction = "";
-            let isCopywriting = state.selectedCategoryId === 'COPYWRITING';
-
-            // --- LOGIC GATES ---
-            if (state.selectedCategoryId === 'MANGA') {
-                layoutInstruction = PROMPT_MAPPINGS.MANGA.mangaLayout[state.options.mangaLayout] || PROMPT_MAPPINGS.MANGA.mangaLayout['SINGLE'];
-                styleVariationInstruction = `風格設定: ${PROMPT_MAPPINGS.MANGA.mangaStyle[state.options.mangaStyle] || PROMPT_MAPPINGS.MANGA.mangaStyle['JAPANESE']}`;
-            }
-            else if (state.selectedCategoryId === 'CINEMATIC_3D') {
-                const stylePrompt = PROMPT_MAPPINGS.CINEMATIC_3D.cinematicStyle[state.options.cinematicStyle] || PROMPT_MAPPINGS.CINEMATIC_3D.cinematicStyle['HYPER_REALISTIC'];
-                styleVariationInstruction = `SELECTED STYLE: ${stylePrompt}\nCRITICAL: Do NOT mix styles.`;
-            }
-            else if (state.selectedCategoryId === 'LINE_STICKER') {
-                layoutInstruction = PROMPT_MAPPINGS.LINE_STICKER.stickerLayout[state.options.stickerLayout] || PROMPT_MAPPINGS.LINE_STICKER.stickerLayout['SINGLE'];
-                styleVariationInstruction = PROMPT_MAPPINGS.LINE_STICKER.style.DEFAULT;
-            }
-            else if (state.selectedCategoryId === 'ADVERTISEMENT') {
-                if (state.options.adMode === 'HAND_MODEL') {
-                    styleVariationInstruction = `拍攝模式: 手部特寫 (${state.options.adHandType})，高質感膚質。`;
-                } else if (state.options.adMode === 'FULL_MODEL') {
-                    styleVariationInstruction = `拍攝模式: 模特兒情境 (${state.options.adModelType}, ${state.options.adRegion})。`;
-                } else {
-                    styleVariationInstruction = `拍攝模式: 展示台 (${state.options.adPodiumType})。`;
-                }
-            }
+            const categoryInstruction = getCategoryInstructions(state.selectedCategoryId, state.options);
 
             // System Construct
             const systemInstruction = `
                 ${cat.baseSystemPrompt}
-                ${layoutInstruction}
-                ${styleVariationInstruction}
+                ${categoryInstruction}
                 構圖比例: ${state.options.aspectRatio}
                 IMPORTANT: Return ONLY the optimized Traditional Chinese prompt text.
              `;
@@ -526,77 +424,29 @@
         const renderOptionControls = () => {
             const panel = document.getElementById('optionsPanel');
             const debugPanel = document.getElementById('debugPromptPanel');
-            const catId = state.selectedCategoryId;
+            const groups = CATEGORY_OPTIONS[state.selectedCategoryId] || [];
+            const controlsHtml = groups.map((group) => `
+                <div class="mb-4">
+                    <h3 class="text-xs font-bold mb-2 text-indigo-500">${group.title}</h3>
+                    <div class="flex flex-wrap gap-2">
+                        ${group.options.map((option) => {
+                            const safePrompt = option.prompt.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                            return `
+                                <button type="button" onclick="window.updateOption('${group.key}', '${option.value}')"
+                                    onmouseenter="window.showDebugPrompt('${safePrompt}')"
+                                    onmouseleave="window.showDebugPrompt('')"
+                                    class="px-3 py-1.5 rounded-lg text-sm border transition-all
+                                    ${state.options[group.key] === option.value
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
+                                    ${option.label}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `).join('');
 
-            // Define controls HTML based on Category
-            let controlsHtml = '';
-
-            // Helper for buttons
-            const mkBtn = (group, value, label, current) => {
-                // Resolve Prompt for Debug
-                let debugPrompt = "";
-                if (PROMPT_MAPPINGS[catId] && PROMPT_MAPPINGS[catId][group]) {
-                    debugPrompt = PROMPT_MAPPINGS[catId][group][value] || "";
-                }
-
-
-
-                // Clean string for HTML attribute
-                const safePrompt = debugPrompt.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-                return `
-                <button onclick="window.updateOption('${group}', '${value}')" 
-                    onmouseenter="window.showDebugPrompt('${safePrompt}')"
-                    onmouseleave="window.showDebugPrompt('')"
-                    class="px-3 py-1.5 rounded-lg text-sm border transition-all
-                    ${current === value
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
-                    ${label}
-                </button>
-            `};
-
-            if (catId === 'MANGA') {
-                controlsHtml += `
-                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">漫畫格式</h3><div class="flex flex-wrap gap-2">
-                        ${mkBtn('mangaLayout', 'SINGLE', '單幅', state.options.mangaLayout)}
-                        ${mkBtn('mangaLayout', 'FOUR_PANEL', '四格', state.options.mangaLayout)}
-                        ${mkBtn('mangaLayout', 'COVER', '封面', state.options.mangaLayout)}
-                    </div></div>
-                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">畫風流派</h3><div class="flex flex-wrap gap-2">
-                        ${mkBtn('mangaStyle', 'JAPANESE', '日系', state.options.mangaStyle)}
-                        ${mkBtn('mangaStyle', 'AMERICAN', '美式', state.options.mangaStyle)}
-                        ${mkBtn('mangaStyle', 'KOREAN', '韓漫', state.options.mangaStyle)}
-                        ${mkBtn('mangaStyle', 'PIXEL', '像素', state.options.mangaStyle)}
-                    </div></div>
-                `;
-            } else if (catId === 'LIN_STICKER' || catId === 'LINE_STICKER') {
-                controlsHtml += `
-                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">貼圖數量</h3><div class="flex flex-wrap gap-2">
-                        ${mkBtn('stickerLayout', 'SINGLE', '單張 (1)', state.options.stickerLayout)}
-                        ${mkBtn('stickerLayout', 'SET', '套組 (8)', state.options.stickerLayout)}
-                    </div></div>
-                `;
-            } else if (catId === 'ADVERTISEMENT') {
-                controlsHtml += `
-                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">拍攝模式</h3><div class="flex flex-wrap gap-2">
-                        ${mkBtn('adMode', 'PODIUM', '展示台', state.options.adMode)}
-                        ${mkBtn('adMode', 'HAND_MODEL', '手模', state.options.adMode)}
-                        ${mkBtn('adMode', 'FULL_MODEL', '模特兒', state.options.adMode)}
-                    </div></div>
-                `;
-            } else if (catId === 'CINEMATIC_3D') {
-                controlsHtml += `
-                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">渲染風格</h3><div class="flex flex-wrap gap-2">
-                        ${mkBtn('cinematicStyle', 'HYPER_REALISTIC', '極致寫實', state.options.cinematicStyle)}
-                        ${mkBtn('cinematicStyle', 'DISNEY', '迪士尼', state.options.cinematicStyle)}
-                        ${mkBtn('cinematicStyle', 'PIXAR', '皮克斯', state.options.cinematicStyle)}
-                        ${mkBtn('cinematicStyle', 'CYBERPUNK', '賽博龐克', state.options.cinematicStyle)}
-                    </div></div>
-                `;
-            }
-
-            // Inject
             if (controlsHtml) {
                 panel.innerHTML = controlsHtml;
                 panel.classList.remove('hidden');
